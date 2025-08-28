@@ -2,40 +2,86 @@
 <html>
 <head>
   <title>PVC Shop Notifier</title>
+  <style>
+    body { font-family: sans-serif; max-width: 600px; margin: auto; padding: 2em; }
+    input { width: 100%; padding: 8px; margin-bottom: 1em; box-sizing: border-box; }
+    button { padding: 10px 15px; cursor: pointer; }
+  </style>
 </head>
 <body>
   <h2>PVC Shop Notifier</h2>
-  <p>Click below to enable notifications for trades.</p>
+  <p>Enter the exact name of the shop owner you want to follow and click the button to receive sale and out-of-stock notifications.</p>
+  
+  <label for="shopName">Shop Owner Name:</label>
+  <input type="text" id="shopName" placeholder="e.g., TheAymane" required>
+  
   <button id="subscribe">Enable Notifications</button>
 
   <script>
     const vapidKey = "{{ vapid_key }}";
+    const subscribeButton = document.getElementById("subscribe");
+    const shopNameInput = document.getElementById("shopName");
 
     async function subscribe() {
-      const reg = await navigator.serviceWorker.register("/static/sw.js");
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapidKey)
-      });
+      const shopName = shopNameInput.value.trim();
+      if (!shopName) {
+        alert("Please enter a shop owner name.");
+        return;
+      }
 
-      await fetch("/subscribe", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify(sub)
-      });
+      // Check for permission and service worker support
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        alert("Web Push is not supported by your browser.");
+        return;
+      }
+      
+      subscribeButton.disabled = true;
 
-      alert("Subscribed!");
+      try {
+        const reg = await navigator.serviceWorker.register("/static/sw.js");
+        const sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidKey)
+        });
+
+        // Send the subscription and the shop name to the server
+        const response = await fetch("/subscribe", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({
+            subscription: sub.toJSON(),
+            shopName: shopName
+          })
+        });
+
+        if (response.ok) {
+          alert(`Successfully subscribed to notifications for '${shopName}'!`);
+        } else {
+          const errorData = await response.json();
+          alert(`Failed to subscribe: ${errorData.error || 'Unknown error'}`);
+        }
+
+      } catch (error) {
+        console.error("Subscription failed:", error);
+        alert("Failed to subscribe. Please ensure notifications are not blocked for this site.");
+      } finally {
+        subscribeButton.disabled = false;
+      }
     }
 
+    // Helper function to convert VAPID key
     function urlBase64ToUint8Array(base64String) {
       const padding = '='.repeat((4 - base64String.length % 4) % 4);
       const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
-      const raw = atob(base64);
-      return new Uint8Array([...raw].map(c => c.charCodeAt(0)));
+      const rawData = window.atob(base64);
+      const outputArray = new Uint8Array(rawData.length);
+      for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+      }
+      return outputArray;
     }
 
-    document.getElementById("subscribe").onclick = subscribe;
+    subscribeButton.onclick = subscribe;
   </script>
 </body>
 </html>
-
