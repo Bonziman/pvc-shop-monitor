@@ -1,3 +1,3 @@
 #!/bin/bash
-gunicorn app:app --bind 0.0.0.0:$PORT --workers 1
+exec gunicorn -b 0.0.0.0:10000 app:app
 

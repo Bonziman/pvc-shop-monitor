@@ -1,62 +1,88 @@
-import os
-import threading
+import json
 import time
+import threading
 import requests
-from flask import Flask
+from flask import Flask, render_template, request, jsonify
+from pywebpush import webpush, WebPushException
 
 app = Flask(__name__)
 
-PB_API_TOKEN = os.getenv("PB_API_TOKEN")  # set in Render dashboard
-TARGET_OWNERS = ["TheAymane", ".AymaneGaming579"]
-DATA_URL = "https://web.peacefulvanilla.club/shops/data.json"
+# VAPID keys (generate with: `pywebpush generateVAPIDKeys`)
+VAPID_PUBLIC_KEY = "YOUR_PUBLIC_KEY"
+VAPID_PRIVATE_KEY = "YOUR_PRIVATE_KEY"
 
-# track stock between loops
-previous_stock = {}
+with open("subscriptions.json", "r") as f:
+    subscriptions = json.load(f)
 
-def send_push(title, body):
-    if not PB_API_TOKEN:
-        print("[WARN] PB_API_TOKEN not set")
-        return
-    requests.post(
-        "https://api.pushbullet.com/v2/pushes",
-        headers={"Access-Token": PB_API_TOKEN},
-        json={"type": "note", "title": title, "body": body}
-    )
+TARGET_SHOPS = ["TheAymane", ".AymaneGaming579"]  # Only monitor these owners
 
-def monitor_loop():
-    global previous_stock
-    while True:
-        try:
-            r = requests.get(DATA_URL, timeout=15)
-            data = r.json()["data"]
-
-            for shop in data:
-                shop_name = shop.get("shopName") or "Unnamed Shop"
-                for recipe in shop["recipes"]:
-                    result = recipe["resultItem"]["type"]
-                    stock = recipe.get("stock", 0)
-                    key = f"{shop['shopOwner']}::{shop_name}::{result}"
-
-                    if key in previous_stock:
-                        delta = stock - previous_stock[key]
-                        if delta < 0:
-                            send_push("SALE 💸",
-                                      f"{shop['shopOwner']} sold {abs(delta)}x {result} at {shop_name}\nNew stock: {stock}")
-                        if stock == 0 and previous_stock[key] > 0:
-                            send_push("OUT OF STOCK ❌",
-                                      f"{shop['shopOwner']} ran out of {result} at {shop_name}")
-                    previous_stock[key] = stock
-
-        except Exception as e:
-            print("Error:", e)
-
-        time.sleep(30)  # check every 30s
-
-# Start monitoring in background
-threading.Thread(target=monitor_loop, daemon=True).start()
 
 @app.route("/")
-def home():
-    return "PVC Notifier is running ✅"
+def index():
+    return render_template("index.html", vapid_key=VAPID_PUBLIC_KEY)
 
+
+@app.route("/subscribe", methods=["POST"])
+def subscribe():
+    sub = request.json
+    subscriptions[sub["endpoint"]] = sub
+    with open("subscriptions.json", "w") as f:
+        json.dump(subscriptions, f)
+    return jsonify({"status": "subscribed"})
+
+
+def send_notification(sub, message):
+    try:
+        webpush(
+            subscription_info=sub,
+            data=message,
+            vapid_private_key=VAPID_PRIVATE_KEY,
+            vapid_claims={"sub": "mailto:example@yourdomain.com"}
+        )
+    except WebPushException as ex:
+        print("Push failed:", repr(ex))
+
+
+def poll_trades():
+    url = "https://web.peacefulvanilla.club/shops/data.json"
+    prev_stocks = {}
+
+    while True:
+        try:
+            data = requests.get(url, timeout=10).json()["data"]
+
+            for shop in data:
+                if shop["shopOwner"] not in TARGET_SHOPS:
+                    continue
+
+                for recipe in shop["recipes"]:
+                    key = f"{shop['shopOwner']}|{recipe['resultItem']['type']}"
+                    stock = recipe["stock"]
+                    old_stock = prev_stocks.get(key, stock)
+
+                    if stock < old_stock:  # SALE
+                        msg = f"SALE at {shop['shopOwner']}: {recipe['resultItem']['type']} stock {old_stock}->{stock}"
+                        print(msg)
+                        for sub in subscriptions.values():
+                            send_notification(sub, msg)
+
+                    if stock == 0 and old_stock > 0:  # OUT OF STOCK
+                        msg = f"OUT OF STOCK at {shop['shopOwner']}: {recipe['resultItem']['type']}"
+                        print(msg)
+                        for sub in subscriptions.values():
+                            send_notification(sub, msg)
+
+                    prev_stocks[key] = stock
+
+        except Exception as e:
+            print("Error polling:", e)
+
+        time.sleep(30)
+
+
+# Background worker
+threading.Thread(target=poll_trades, daemon=True).start()
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
 

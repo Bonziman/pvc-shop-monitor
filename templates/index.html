@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>PVC Shop Notifier</title>
+</head>
+<body>
+  <h2>PVC Shop Notifier</h2>
+  <p>Click below to enable notifications for trades.</p>
+  <button id="subscribe">Enable Notifications</button>
+
+  <script>
+    const vapidKey = "{{ vapid_key }}";
+
+    async function subscribe() {
+      const reg = await navigator.serviceWorker.register("/static/sw.js");
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapidKey)
+      });
+
+      await fetch("/subscribe", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(sub)
+      });
+
+      alert("Subscribed!");
+    }
+
+    function urlBase64ToUint8Array(base64String) {
+      const padding = '='.repeat((4 - base64String.length % 4) % 4);
+      const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+      const raw = atob(base64);
+      return new Uint8Array([...raw].map(c => c.charCodeAt(0)));
+    }
+
+    document.getElementById("subscribe").onclick = subscribe;
+  </script>
+</body>
+</html>
+
