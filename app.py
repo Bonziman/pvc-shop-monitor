@@ -31,8 +31,6 @@ def monitor_loop():
             data = r.json()["data"]
 
             for shop in data:
-                if shop["shopOwner"] not in TARGET_OWNERS:
-                    continue
                 shop_name = shop.get("shopName") or "Unnamed Shop"
                 for recipe in shop["recipes"]:
                     result = recipe["resultItem"]["type"]
