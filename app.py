@@ -10,9 +10,8 @@ app = Flask(__name__)
 
 # --- CONFIGURATION ---
 # 1. VAPID keys for web push (from 'vapid --gen --json')
-VAPID_PUBLIC_KEY = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE+JzFGwVKJbCqsQIZV1G+eYTPcflAieEFCMCbzt1d+5RQ9bI2z/UAngyNqJkR4Y9i1rOohUTdnvxzEA6scN+1NQ=="
-VAPID_PRIVATE_KEY = "MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQg+mJU6M+qg+nGyn0ddZyFOvSlMDUM1a36fCWfpaXQlN2hRANCAAT4nMUbBUolsKqxAhlXUb55hM9x+UCJ4QUIwJvO3V37lFD1sjbP9QCeDI2omRHhj2LWs6iFRN2e/HMQDqxw37U1"
-
+VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY")
+VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY")
 # 2. Pushbullet API Key for your personal notifications
 PUSHBULLET_API_KEY = "o.ebw7nrnJadssASuelll5czivZqvo9Gdw" 
 
@@ -20,7 +19,7 @@ PUSHBULLET_API_KEY = "o.ebw7nrnJadssASuelll5czivZqvo9Gdw"
 PUSHBULLET_TARGET_SHOPS = ["TheAymane", ".AymaneGaming579"]
 
 # --- INITIALIZATION ---
-pb = Pushbullet(PUSHBULLET_API_KEY) if PUSHBULLET_API_KEY != "o.ebw7nrnJadssASuelll5czivZqvo9Gdw" else None
+pb = Pushbullet(PUSHBULLET_API_KEY) if PUSHBULLET_API_KEY != os.environ.get("PUSHBULLET_API_KEY") else None
 
 # Safely load shop subscriptions from file
 def load_subscriptions():
